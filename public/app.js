@@ -1,5 +1,6 @@
 /**
- * YT Studio Music - Smart Queue & Mobile Optimized Engine
+ * YouTube Music Pro - Instant Playback Engine
+ * Official YouTube Engine with 0s latency + MediaSession Background Play + LRCLIB Synced Lyrics + Zero-Duplicate Queue
  */
 
 (function () {
@@ -12,7 +13,7 @@
     queueIndex: -1,
     isPlaying: false,
     isShuffle: false,
-    repeatMode: 'off',
+    repeatMode: 'off', // 'off' | 'all' | 'one'
     autoplayEnabled: true,
     playbackSpeed: 1.0,
     volume: 80,
@@ -31,102 +32,102 @@
     nodes: []
   };
 
-  // --- AUDIO ELEMENT ---
-  const audioElement = new Audio();
-  audioElement.preload = 'auto';
-  audioElement.crossOrigin = 'anonymous';
+  // --- YOUTUBE ENGINE CONTROLLER ---
+  let ytPlayer = null;
+  let ytPlayerReady = false;
+  let progressInterval = null;
 
-  let audioCtx = null;
-  let sourceNode = null;
-  let analyserNode = null;
-  let eqFilters = [];
-  let audioUnlocked = false;
+  window.onYouTubeIframeAPIReady = function () {
+    ytPlayer = new YT.Player('yt-player', {
+      height: '1',
+      width: '1',
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        enablejsapi: 1,
+        fs: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        rel: 0
+      },
+      events: {
+        onReady: onPlayerReady,
+        onStateChange: onPlayerStateChange,
+        onError: onPlayerError
+      }
+    });
+  };
 
-  function initWebAudio() {
-    if (audioCtx) return;
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      audioCtx = new AudioContext();
-
-      sourceNode = audioCtx.createMediaElementSource(audioElement);
-      analyserNode = audioCtx.createAnalyser();
-      analyserNode.fftSize = 64;
-
-      const freqs = [60, 250, 1000, 4000, 16000];
-      eqFilters = freqs.map((freq, idx) => {
-        const filter = audioCtx.createBiquadFilter();
-        if (idx === 0) filter.type = 'lowshelf';
-        else if (idx === freqs.length - 1) filter.type = 'highshelf';
-        else filter.type = 'peaking';
-        filter.frequency.value = freq;
-        filter.gain.value = 0;
-        return filter;
-      });
-
-      let prev = sourceNode;
-      eqFilters.forEach(f => {
-        prev.connect(f);
-        prev = f;
-      });
-      prev.connect(analyserNode);
-      analyserNode.connect(audioCtx.destination);
-    } catch (e) {}
+  function onPlayerReady() {
+    ytPlayerReady = true;
+    ytPlayer.setVolume(state.volume);
+    console.log('⚡ YouTube Audio Engine Ready');
   }
 
-  function unlockAudio() {
-    if (audioUnlocked) return;
-    try {
-      if (!audioCtx) initWebAudio();
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      audioUnlocked = true;
-    } catch (e) {}
-  }
+  function onPlayerStateChange(event) {
+    // YT.PlayerState.PLAYING === 1
+    // YT.PlayerState.PAUSED === 2
+    // YT.PlayerState.ENDED === 0
+    // YT.PlayerState.BUFFERING === 3
 
-  // --- AUDIO LISTENERS ---
-  audioElement.addEventListener('play', () => {
-    state.isPlaying = true;
-    updatePlayBtnUI();
-    updateMediaSession();
-  });
-
-  audioElement.addEventListener('pause', () => {
-    state.isPlaying = false;
-    updatePlayBtnUI();
-  });
-
-  audioElement.addEventListener('timeupdate', () => {
-    const cur = audioElement.currentTime || 0;
-    const dur = audioElement.duration || state.duration || 0;
-    state.currentTime = cur;
-    if (dur && !isNaN(dur) && dur > 0) state.duration = dur;
-    state.stats.seconds += 0.25;
-
-    const curFormatted = formatTime(cur);
-    const durFormatted = formatTime(state.duration);
-
-    document.getElementById('player-current-time').textContent = curFormatted;
-    document.getElementById('np-current-time').textContent = curFormatted;
-
-    if (state.duration > 0) {
-      document.getElementById('player-total-time').textContent = durFormatted;
-      document.getElementById('np-total-time').textContent = durFormatted;
-      const pct = (cur / state.duration) * 100;
-      document.getElementById('player-seek-slider').value = pct;
-      document.getElementById('np-seek-slider').value = pct;
-      document.getElementById('mini-player-progress-fill').style.width = pct + '%';
+    if (event.data === 1) {
+      state.isPlaying = true;
+      updatePlayBtnUI();
+      updateMediaSession();
+      startProgressTracking();
+    } else if (event.data === 2) {
+      state.isPlaying = false;
+      updatePlayBtnUI();
+      stopProgressTracking();
+    } else if (event.data === 0) {
+      handleTrackEnd();
     }
+  }
 
-    syncLyricsWithTime(cur);
-  });
+  function onPlayerError(err) {
+    console.warn('YouTube playback error:', err.data);
+    showNotification('Video restricted, playing next song...');
+    setTimeout(playNextTrack, 1000);
+  }
 
-  audioElement.addEventListener('ended', handleTrackEnd);
+  function startProgressTracking() {
+    stopProgressTracking();
+    progressInterval = setInterval(() => {
+      if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+      try {
+        const cur = ytPlayer.getCurrentTime() || 0;
+        const dur = ytPlayer.getDuration() || state.duration || 0;
+        state.currentTime = cur;
+        if (dur > 0) state.duration = dur;
+        state.stats.seconds += 0.25;
 
-  audioElement.addEventListener('error', (e) => {
-    console.warn('Stream buffer error, advancing track:', e);
-    showNotification('Advancing to next track...');
-    setTimeout(playNextTrack, 1200);
-  });
+        const curFormatted = formatTime(cur);
+        const durFormatted = formatTime(state.duration);
+
+        document.getElementById('player-current-time').textContent = curFormatted;
+        document.getElementById('np-current-time').textContent = curFormatted;
+
+        if (state.duration > 0) {
+          document.getElementById('player-total-time').textContent = durFormatted;
+          document.getElementById('np-total-time').textContent = durFormatted;
+          const pct = (cur / state.duration) * 100;
+          document.getElementById('player-seek-slider').value = pct;
+          document.getElementById('np-seek-slider').value = pct;
+          document.getElementById('mini-player-progress-fill').style.width = pct + '%';
+        }
+
+        syncLyricsWithTime(cur);
+      } catch (e) {}
+    }, 250);
+  }
+
+  function stopProgressTracking() {
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+  }
 
   // --- DEDUPLICATION UTILITY ---
   function normalizeTitle(str) {
@@ -227,8 +228,6 @@
   function playTrack(track, fromQueue = false) {
     if (!track || !track.id) return;
 
-    unlockAudio();
-
     state.currentTrack = track;
     state.duration = track.duration ? track.duration / 1000 : 0;
     state.currentTime = 0;
@@ -253,6 +252,7 @@
 
     const artwork = track.artworkHigh || track.artwork || `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`;
     
+    // UI Updates
     document.getElementById('player-cover-img').src = artwork;
     document.getElementById('player-title').textContent = track.title;
     document.getElementById('player-artist').textContent = track.author;
@@ -272,25 +272,29 @@
     renderQueue();
     fetchLyrics(track.title, track.author);
 
-    audioElement.src = `/api/stream?id=${track.id}`;
-    audioElement.playbackRate = state.playbackSpeed;
-    audioElement.volume = state.volume / 100;
-    audioElement.play().catch(() => {});
+    // Instant Play via YouTube Engine
+    if (ytPlayer && ytPlayer.loadVideoById) {
+      ytPlayer.loadVideoById(track.id);
+      ytPlayer.setPlaybackRate(state.playbackSpeed);
+      ytPlayer.setVolume(state.volume);
+    }
 
     document.title = `▶ ${track.title} - ${track.author}`;
     updateMediaSession();
   }
 
   function togglePlay() {
-    unlockAudio();
     if (!state.currentTrack) {
       if (state.queue.length > 0) playTrack(state.queue[0], true);
       return;
     }
-    if (audioElement.paused) {
-      audioElement.play().catch(() => {});
+    if (!ytPlayer || !ytPlayer.getPlayerState) return;
+
+    const playerState = ytPlayer.getPlayerState();
+    if (playerState === 1) { // playing
+      ytPlayer.pauseVideo();
     } else {
-      audioElement.pause();
+      ytPlayer.playVideo();
     }
   }
 
@@ -327,7 +331,7 @@
 
   function playPrevTrack() {
     if (state.queue.length === 0) return;
-    if (audioElement.currentTime > 4) {
+    if (state.currentTime > 4) {
       seekTo(0);
       return;
     }
@@ -341,15 +345,15 @@
     if (state.sleepTimerEndTrack) {
       state.sleepTimerEndTrack = false;
       showNotification('Sleep Timer: Track finished 🌙');
-      audioElement.pause();
+      if (ytPlayer) ytPlayer.pauseVideo();
       return;
     }
     playNextTrack();
   }
 
   function seekTo(seconds) {
-    if (audioElement) {
-      audioElement.currentTime = seconds;
+    if (ytPlayer && ytPlayer.seekTo) {
+      ytPlayer.seekTo(seconds, true);
       state.currentTime = seconds;
       const formatted = formatTime(seconds);
       document.getElementById('player-current-time').textContent = formatted;
@@ -364,7 +368,7 @@
 
   function setVolume(val) {
     state.volume = parseInt(val, 10);
-    audioElement.volume = state.volume / 100;
+    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(state.volume);
   }
 
   function updateMediaSession() {
@@ -373,7 +377,7 @@
       navigator.mediaSession.metadata = new MediaMetadata({
         title: t.title,
         artist: t.author,
-        album: 'YT Studio Music',
+        album: 'YouTube Music Pro',
         artwork: [
           { src: t.artworkHigh || t.artwork || `https://i.ytimg.com/vi/${t.id}/hqdefault.jpg`, sizes: '512x512', type: 'image/jpeg' }
         ]
@@ -537,7 +541,7 @@
         <div class="hero-content">
           <div class="hero-tag">🌟 Featured Hit</div>
           <h1 class="hero-title">${escapeHtml(featured.title || 'Trending Song')}</h1>
-          <p class="hero-subtitle">${escapeHtml(featured.author || 'Artist')} • Ad-Free Unlimited Playback</p>
+          <p class="hero-subtitle">${escapeHtml(featured.author || 'Artist')} • Instant Ad-Free Playback</p>
           <button id="hero-play-btn" class="hero-btn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             Play Now
@@ -546,7 +550,6 @@
         <img src="${featured.artworkHigh || featured.artwork}" style="width: 130px; height: 130px; border-radius: var(--radius-md); object-fit: cover; box-shadow: 0 10px 30px rgba(0,0,0,0.6);" alt="Cover">
       </div>
 
-      <!-- Quick Picks Carousel (Horizontal Swipeable for Mobile & Desktop) -->
       <div>
         <div class="section-header">
           <h2 class="section-title">Quick Picks</h2>
@@ -568,7 +571,6 @@
         </div>
       </div>
 
-      <!-- Trending List -->
       <div>
         <div class="section-header">
           <h2 class="section-title">Trending Tracks</h2>
@@ -1087,7 +1089,7 @@
     document.getElementById('timer-modal').classList.remove('open');
 
     state.sleepTimerTimeout = setTimeout(() => {
-      audioElement.pause();
+      if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
       showNotification('Sleep Timer: Audio paused. Goodnight! 🌙');
       statusEl.textContent = 'No timer active';
     }, minNum * 60 * 1000);
@@ -1099,67 +1101,9 @@
     const curIdx = speeds.indexOf(state.playbackSpeed);
     const nextIdx = (curIdx + 1) % speeds.length;
     state.playbackSpeed = speeds[nextIdx];
-    audioElement.playbackRate = state.playbackSpeed;
+    if (ytPlayer && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(state.playbackSpeed);
     document.getElementById('np-speed-label').textContent = `${state.playbackSpeed}x`;
     showNotification(`Playback speed: ${state.playbackSpeed}x`);
-  }
-
-  // --- EQUALIZER PRESETS ---
-  const eqPresets = {
-    flat: [0, 0, 0, 0, 0],
-    bass: [6, 4, 1, -1, -2],
-    vocal: [-2, 1, 4, 3, 1],
-    electronic: [5, 3, -1, 2, 4],
-    rock: [4, 2, -1, 3, 5]
-  };
-
-  function applyEqPreset(presetName) {
-    const gains = eqPresets[presetName] || eqPresets.flat;
-    const sliderIds = ['eq-60hz', 'eq-250hz', 'eq-1khz', 'eq-4khz', 'eq-16khz'];
-    
-    gains.forEach((gain, i) => {
-      if (eqFilters[i]) eqFilters[i].gain.value = gain;
-      const el = document.getElementById(sliderIds[i]);
-      if (el) el.value = gain;
-    });
-
-    document.querySelectorAll('.eq-preset').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-preset') === presetName);
-    });
-  }
-
-  // --- LIVE AUDIO VISUALIZER CANVAS ---
-  function initVisualizer() {
-    const canvas = document.getElementById('audio-visualizer-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const bars = 8;
-    const dataArray = new Uint8Array(bars);
-
-    function draw() {
-      requestAnimationFrame(draw);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (analyserNode && state.isPlaying) {
-        analyserNode.getByteFrequencyData(dataArray);
-      }
-
-      for (let i = 0; i < bars; i++) {
-        let height = 3;
-        if (state.isPlaying) {
-          if (analyserNode && dataArray[i]) {
-            height = (dataArray[i] / 255) * (canvas.height - 4) + 3;
-          } else {
-            height = Math.sin(Date.now() / 140 + i * 1.1) * 7 + 9;
-          }
-        }
-        const x = i * 6 + 2;
-        const y = canvas.height - height;
-        ctx.fillStyle = '#ff0033';
-        ctx.fillRect(x, y, 3.5, height);
-      }
-    }
-    draw();
   }
 
   function updatePlayBtnUI() {
@@ -1205,9 +1149,6 @@
 
   // --- INITIALIZE ALL EVENT LISTENERS ---
   function initEventListeners() {
-    window.addEventListener('touchstart', unlockAudio, { passive: true, once: true });
-    window.addEventListener('click', unlockAudio, { passive: true, once: true });
-
     document.getElementById('nav-brand-home').addEventListener('click', () => {
       switchView('home');
       loadCategory('trending');
@@ -1302,7 +1243,7 @@
       autoHeaderBtn.classList.toggle('active', val);
       autoHeaderBtn.querySelector('.btn-text').textContent = val ? 'Autoplay: ON' : 'Autoplay: OFF';
       if (autoSidebarCheckbox) autoSidebarCheckbox.checked = val;
-      showNotification(val ? 'Automatic Radio ON ⚡' : 'Autoplay OFF');
+      showNotification(val ? 'Continuous Radio ON ⚡' : 'Autoplay OFF');
     }
 
     autoHeaderBtn.addEventListener('click', () => setAutoplay(!state.autoplayEnabled));
@@ -1407,6 +1348,9 @@
     document.getElementById('np-timer-btn').addEventListener('click', () => {
       document.getElementById('timer-modal').classList.add('open');
     });
+    document.getElementById('np-timer-btn-top')?.addEventListener('click', () => {
+      document.getElementById('timer-modal').classList.add('open');
+    });
     document.getElementById('timer-toggle-btn')?.addEventListener('click', () => {
       document.getElementById('timer-modal').classList.add('open');
     });
@@ -1418,20 +1362,6 @@
       btn.addEventListener('click', () => {
         const min = btn.getAttribute('data-minutes');
         setSleepTimer(min);
-      });
-    });
-
-    // Equalizer
-    document.querySelectorAll('.eq-preset').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const preset = btn.getAttribute('data-preset');
-        applyEqPreset(preset);
-      });
-    });
-
-    ['eq-60hz', 'eq-250hz', 'eq-1khz', 'eq-4khz', 'eq-16khz'].forEach((id, i) => {
-      document.getElementById(id)?.addEventListener('input', (e) => {
-        if (eqFilters[i]) eqFilters[i].gain.value = parseFloat(e.target.value);
       });
     });
 
@@ -1455,13 +1385,6 @@
     document.getElementById('lyrics-toggle-btn')?.addEventListener('click', openLyrics);
     document.getElementById('np-lyrics-btn')?.addEventListener('click', openLyrics);
     document.getElementById('lyrics-close-btn').addEventListener('click', () => lyricsModal.classList.remove('open'));
-
-    // Equalizer Modal
-    const eqModal = document.getElementById('eq-modal');
-    const openEq = () => eqModal.classList.add('open');
-    document.getElementById('eq-toggle-btn')?.addEventListener('click', openEq);
-    document.getElementById('np-eq-btn')?.addEventListener('click', openEq);
-    document.getElementById('eq-close-btn').addEventListener('click', () => eqModal.classList.remove('open'));
 
     // Node Modal
     const nodeModal = document.getElementById('node-modal');
@@ -1532,7 +1455,6 @@
   function init() {
     initEventListeners();
     renderSidebarPlaylists();
-    initVisualizer();
     loadCategory('trending');
     fetchNodeStatus();
 
