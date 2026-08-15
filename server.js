@@ -8,13 +8,18 @@ const { spawn } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const CACHE_DIR = path.join(__dirname, 'cache');
+
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
 
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Lavalink Node Pool with live health checking
+// Lavalink Node Pool
 const LAVALINK_NODES = [
   { id: 'millohost-ssl', name: 'Millohost SSL (Fast)', url: 'https://lava-v4.millohost.my.id', port: 443, auth: 'https://discord.gg/mjS5J2K3ep', isSSL: true, status: 'online', ping: 150 },
   { id: 'kasawa-nonssl', name: 'Kasawa v4 (Backup)', url: 'http://lava2.kasawa.pro:2334', port: 2334, auth: 'youshallnotpass', isSSL: false, status: 'online', ping: 480 },
@@ -141,12 +146,47 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// 2. Direct Audio Stream Pipe (High Quality MP3 / Opus Stream)
+// 2. Pure 320kbps Audio Stream Engine (No Video, No Restrictions, Instant Range Support)
 app.get('/api/stream', (req, res) => {
   const id = req.query.id;
   if (!id) return res.status(400).send('ID required');
 
-  console.log(`🎵 Streaming audio for track: ${id}`);
+  const cachedFile = path.join(CACHE_DIR, `${id}.mp3`);
+
+  // If cached file exists, stream with HTTP Range support (Instant seek!)
+  if (fs.existsSync(cachedFile)) {
+    const stat = fs.statSync(cachedFile);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      const file = fs.createReadStream(cachedFile, { start, end });
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'audio/mpeg',
+      };
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': 'audio/mpeg',
+        'Accept-Ranges': 'bytes'
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(cachedFile).pipe(res);
+    }
+    return;
+  }
+
+  // Stream live and cache concurrently
+  console.log(`🎵 Extracting highest quality 320kbps audio for: ${id}`);
 
   res.header('Content-Type', 'audio/mpeg');
   res.header('Accept-Ranges', 'bytes');
@@ -154,7 +194,7 @@ app.get('/api/stream', (req, res) => {
 
   const ytdlArgs = [
     '--cookies', '/home/ubuntu/cookies.txt',
-    '-f', 'ba/b',
+    '-f', 'ba/b/best',
     '-o', '-',
     '--no-playlist',
     `https://www.youtube.com/watch?v=${id}`
@@ -164,15 +204,27 @@ app.get('/api/stream', (req, res) => {
 
   const ffmpeg = spawn('ffmpeg', [
     '-i', 'pipe:0',
-    '-vn',
+    '-vn',                     // Zero video (Pure Audio Only)
     '-c:a', 'libmp3lame',
-    '-b:a', '192k',
+    '-b:a', '320k',            // Studio 320kbps Highest Quality MP3
     '-f', 'mp3',
     'pipe:1'
   ]);
 
   ytdl.stdout.pipe(ffmpeg.stdin);
-  ffmpeg.stdout.pipe(res);
+
+  const fileStream = fs.createWriteStream(cachedFile);
+
+  ffmpeg.stdout.on('data', chunk => {
+    res.write(chunk);
+    fileStream.write(chunk);
+  });
+
+  ffmpeg.stdout.on('end', () => {
+    res.end();
+    fileStream.end();
+    console.log(`✅ Cached 320kbps studio audio for track: ${id}`);
+  });
 
   req.on('close', () => {
     try { ytdl.kill(); } catch (e) {}
@@ -180,12 +232,12 @@ app.get('/api/stream', (req, res) => {
   });
 
   ytdl.on('error', err => {
-    console.error('YTDL spawn error:', err.message);
+    console.error('YTDL stream error:', err.message);
     if (!res.headersSent) res.status(500).send('Stream error');
   });
 
   ffmpeg.on('error', err => {
-    console.error('FFmpeg spawn error:', err.message);
+    console.error('FFmpeg error:', err.message);
     if (!res.headersSent) res.status(500).send('FFmpeg error');
   });
 });
@@ -323,5 +375,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🎵 YT Studio Audio Player server running on http://localhost:${PORT}`);
+  console.log(`🎵 YouTube Music Pro server running on http://localhost:${PORT}`);
 });

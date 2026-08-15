@@ -1,6 +1,6 @@
 /**
- * YouTube Music Pro - Instant Playback Engine
- * Official YouTube Engine with 0s latency + MediaSession Background Play + LRCLIB Synced Lyrics + Zero-Duplicate Queue
+ * YouTube Music Pro - 320kbps Pure Studio Audio Player
+ * Zero Video Restrictions + Background MediaSession Engine + Live Synced Lyrics + Zero Duplicate Queue
  */
 
 (function () {
@@ -13,7 +13,7 @@
     queueIndex: -1,
     isPlaying: false,
     isShuffle: false,
-    repeatMode: 'off', // 'off' | 'all' | 'one'
+    repeatMode: 'off',
     autoplayEnabled: true,
     playbackSpeed: 1.0,
     volume: 80,
@@ -32,102 +32,55 @@
     nodes: []
   };
 
-  // --- YOUTUBE ENGINE CONTROLLER ---
-  let ytPlayer = null;
-  let ytPlayerReady = false;
-  let progressInterval = null;
+  // --- NATIVE AUDIO ENGINE ---
+  const audioElement = new Audio();
+  audioElement.preload = 'auto';
+  audioElement.crossOrigin = 'anonymous';
 
-  window.onYouTubeIframeAPIReady = function () {
-    ytPlayer = new YT.Player('yt-player', {
-      height: '1',
-      width: '1',
-      playerVars: {
-        autoplay: 1,
-        controls: 0,
-        disablekb: 1,
-        enablejsapi: 1,
-        fs: 0,
-        modestbranding: 1,
-        playsinline: 1,
-        rel: 0
-      },
-      events: {
-        onReady: onPlayerReady,
-        onStateChange: onPlayerStateChange,
-        onError: onPlayerError
-      }
-    });
-  };
+  // --- AUDIO LISTENERS ---
+  audioElement.addEventListener('play', () => {
+    state.isPlaying = true;
+    updatePlayBtnUI();
+    updateMediaSession();
+  });
 
-  function onPlayerReady() {
-    ytPlayerReady = true;
-    ytPlayer.setVolume(state.volume);
-    console.log('⚡ YouTube Audio Engine Ready');
-  }
+  audioElement.addEventListener('pause', () => {
+    state.isPlaying = false;
+    updatePlayBtnUI();
+  });
 
-  function onPlayerStateChange(event) {
-    // YT.PlayerState.PLAYING === 1
-    // YT.PlayerState.PAUSED === 2
-    // YT.PlayerState.ENDED === 0
-    // YT.PlayerState.BUFFERING === 3
+  audioElement.addEventListener('timeupdate', () => {
+    const cur = audioElement.currentTime || 0;
+    const dur = audioElement.duration || state.duration || 0;
+    state.currentTime = cur;
+    if (dur && !isNaN(dur) && dur > 0) state.duration = dur;
+    state.stats.seconds += 0.25;
 
-    if (event.data === 1) {
-      state.isPlaying = true;
-      updatePlayBtnUI();
-      updateMediaSession();
-      startProgressTracking();
-    } else if (event.data === 2) {
-      state.isPlaying = false;
-      updatePlayBtnUI();
-      stopProgressTracking();
-    } else if (event.data === 0) {
-      handleTrackEnd();
+    const curFormatted = formatTime(cur);
+    const durFormatted = formatTime(state.duration);
+
+    document.getElementById('player-current-time').textContent = curFormatted;
+    document.getElementById('np-current-time').textContent = curFormatted;
+
+    if (state.duration > 0) {
+      document.getElementById('player-total-time').textContent = durFormatted;
+      document.getElementById('np-total-time').textContent = durFormatted;
+      const pct = (cur / state.duration) * 100;
+      document.getElementById('player-seek-slider').value = pct;
+      document.getElementById('np-seek-slider').value = pct;
+      document.getElementById('mini-player-progress-fill').style.width = pct + '%';
     }
-  }
 
-  function onPlayerError(err) {
-    console.warn('YouTube playback error:', err.data);
-    showNotification('Video restricted, playing next song...');
-    setTimeout(playNextTrack, 1000);
-  }
+    syncLyricsWithTime(cur);
+  });
 
-  function startProgressTracking() {
-    stopProgressTracking();
-    progressInterval = setInterval(() => {
-      if (!ytPlayer || !ytPlayer.getCurrentTime) return;
-      try {
-        const cur = ytPlayer.getCurrentTime() || 0;
-        const dur = ytPlayer.getDuration() || state.duration || 0;
-        state.currentTime = cur;
-        if (dur > 0) state.duration = dur;
-        state.stats.seconds += 0.25;
+  audioElement.addEventListener('ended', handleTrackEnd);
 
-        const curFormatted = formatTime(cur);
-        const durFormatted = formatTime(state.duration);
-
-        document.getElementById('player-current-time').textContent = curFormatted;
-        document.getElementById('np-current-time').textContent = curFormatted;
-
-        if (state.duration > 0) {
-          document.getElementById('player-total-time').textContent = durFormatted;
-          document.getElementById('np-total-time').textContent = durFormatted;
-          const pct = (cur / state.duration) * 100;
-          document.getElementById('player-seek-slider').value = pct;
-          document.getElementById('np-seek-slider').value = pct;
-          document.getElementById('mini-player-progress-fill').style.width = pct + '%';
-        }
-
-        syncLyricsWithTime(cur);
-      } catch (e) {}
-    }, 250);
-  }
-
-  function stopProgressTracking() {
-    if (progressInterval) {
-      clearInterval(progressInterval);
-      progressInterval = null;
-    }
-  }
+  audioElement.addEventListener('error', (e) => {
+    console.warn('Audio stream error, skipping to next track:', e);
+    showNotification('Stream error, loading next track...');
+    setTimeout(playNextTrack, 1200);
+  });
 
   // --- DEDUPLICATION UTILITY ---
   function normalizeTitle(str) {
@@ -157,7 +110,7 @@
         if (uniqueTracks.length > 0) {
           state.queue.push(...uniqueTracks.slice(0, 8));
           renderQueue();
-          console.log(`⚡ Added ${uniqueTracks.length} unique recommended tracks to queue`);
+          console.log(`⚡ Added ${uniqueTracks.length} unique tracks to queue`);
         }
       }
     } catch (e) {}
@@ -272,12 +225,11 @@
     renderQueue();
     fetchLyrics(track.title, track.author);
 
-    // Instant Play via YouTube Engine
-    if (ytPlayer && ytPlayer.loadVideoById) {
-      ytPlayer.loadVideoById(track.id);
-      ytPlayer.setPlaybackRate(state.playbackSpeed);
-      ytPlayer.setVolume(state.volume);
-    }
+    // Play 320kbps Pure Studio Audio Stream
+    audioElement.src = `/api/stream?id=${track.id}`;
+    audioElement.playbackRate = state.playbackSpeed;
+    audioElement.volume = state.volume / 100;
+    audioElement.play().catch(() => {});
 
     document.title = `▶ ${track.title} - ${track.author}`;
     updateMediaSession();
@@ -288,13 +240,10 @@
       if (state.queue.length > 0) playTrack(state.queue[0], true);
       return;
     }
-    if (!ytPlayer || !ytPlayer.getPlayerState) return;
-
-    const playerState = ytPlayer.getPlayerState();
-    if (playerState === 1) { // playing
-      ytPlayer.pauseVideo();
+    if (audioElement.paused) {
+      audioElement.play().catch(() => {});
     } else {
-      ytPlayer.playVideo();
+      audioElement.pause();
     }
   }
 
@@ -331,7 +280,7 @@
 
   function playPrevTrack() {
     if (state.queue.length === 0) return;
-    if (state.currentTime > 4) {
+    if (audioElement.currentTime > 4) {
       seekTo(0);
       return;
     }
@@ -345,15 +294,15 @@
     if (state.sleepTimerEndTrack) {
       state.sleepTimerEndTrack = false;
       showNotification('Sleep Timer: Track finished 🌙');
-      if (ytPlayer) ytPlayer.pauseVideo();
+      audioElement.pause();
       return;
     }
     playNextTrack();
   }
 
   function seekTo(seconds) {
-    if (ytPlayer && ytPlayer.seekTo) {
-      ytPlayer.seekTo(seconds, true);
+    if (audioElement) {
+      audioElement.currentTime = seconds;
       state.currentTime = seconds;
       const formatted = formatTime(seconds);
       document.getElementById('player-current-time').textContent = formatted;
@@ -368,7 +317,7 @@
 
   function setVolume(val) {
     state.volume = parseInt(val, 10);
-    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(state.volume);
+    audioElement.volume = state.volume / 100;
   }
 
   function updateMediaSession() {
@@ -541,7 +490,7 @@
         <div class="hero-content">
           <div class="hero-tag">🌟 Featured Hit</div>
           <h1 class="hero-title">${escapeHtml(featured.title || 'Trending Song')}</h1>
-          <p class="hero-subtitle">${escapeHtml(featured.author || 'Artist')} • Instant Ad-Free Playback</p>
+          <p class="hero-subtitle">${escapeHtml(featured.author || 'Artist')} • 320kbps Pure Studio Audio</p>
           <button id="hero-play-btn" class="hero-btn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             Play Now
@@ -1089,7 +1038,7 @@
     document.getElementById('timer-modal').classList.remove('open');
 
     state.sleepTimerTimeout = setTimeout(() => {
-      if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+      audioElement.pause();
       showNotification('Sleep Timer: Audio paused. Goodnight! 🌙');
       statusEl.textContent = 'No timer active';
     }, minNum * 60 * 1000);
@@ -1101,7 +1050,7 @@
     const curIdx = speeds.indexOf(state.playbackSpeed);
     const nextIdx = (curIdx + 1) % speeds.length;
     state.playbackSpeed = speeds[nextIdx];
-    if (ytPlayer && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(state.playbackSpeed);
+    audioElement.playbackRate = state.playbackSpeed;
     document.getElementById('np-speed-label').textContent = `${state.playbackSpeed}x`;
     showNotification(`Playback speed: ${state.playbackSpeed}x`);
   }
