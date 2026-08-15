@@ -1,0 +1,16 @@
+{
+  "name": "YT Studio Music",
+  "short_name": "YT Studio",
+  "description": "Ad-free unlimited music streaming with background play and Lavalink audio engine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07070a",
+  "theme_color": "#ff0033",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23ff0033'/><polygon points='40,30 72,50 40,70' fill='white'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
