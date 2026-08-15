@@ -1,0 +1,151 @@
+Build a 100% complete, production-ready, ad-free YouTube Music Web & Mobile Application called "YouTube Music Pro" built with React, TypeScript, Tailwind CSS, Lucide React, and Framer Motion. The application must feature real-time search across a multi-node Lavalink v4 cluster, native audio streaming, synchronized lyrics from LRCLIB, 5-band equalizer, sleep timer, background lockscreen playback via MediaSession, and a smart zero-duplicate queue engine.
+1. COLOR PALETTE & DESIGN SYSTEM (1:1 YOUTUBE MUSIC)
+- Background Base: Pure OLED Dark #030303
+- Elevated Card Surfaces: #121212 with hover state #1e1e1e and border #242424
+- Sidebar & Header: #080808 with backdrop-filter: blur(16px)
+- Accent Colors: YouTube Red #FF0000, Crimson #FF0033, Neon Cyan #00F2FE
+- Typography: Plus Jakarta Sans / Roboto (Font weights: 400, 500, 600, 700, 800)
+- Text Hierarchy: Primary #FFFFFF, Secondary #AAAAAA, Muted #666666
+- Active Indicator: #10B981 (Online node badge & active wave animations)
+2. LAVALINK V4 CLUSTER & LIVE API CONFIGURATION
+Implement a robust multi-node load-balancer with automatic failover that checks node latency and routes requests to the fastest available node:
+Node Pool:
+1. Node ID: "millohost-ssl"
+ - Host: "https://lava-v4.millohost.my.id"
+ - Port: 443
+ - Authorization: "https://discord.gg/mjS5J2K3ep"
+ - SSL: true
+2. Node ID: "kasawa-nonssl"
+ - Host: "http://lava2.kasawa.pro"
+ - Port: 2334
+ - Authorization: "youshallnotpass"
+ - SSL: false
+3. Node ID: "jirayu-direct"
+ - Host: "http://lavalink.jirayu.net"
+ - Port: 13592
+ - Authorization: "youshallnotpass"
+ - SSL: false
+4. Node ID: "jirayu-ssl"
+ - Host: "https://lavalink.jirayu.net"
+ - Port: 443
+ - Authorization: "youshallnotpass"
+ - SSL: true
+API Endpoints to Use:
+- Track Search: GET {node.host}:{node.port}/v4/loadtracks?identifier=ytsearch:{query} with header Authorization: {node.auth}
+- Search Autocomplete: GET https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q={query}
+- Real-Time Lyrics: GET https://lrclib.net/api/get?track_name={title}&artist_name={artist} (fallback: https://lrclib.net/api/search?q={query})
+- Audio Playback Stream: Native HTML5 Audio stream pipe from audio source / stream proxy.
+3. TYPESCRIPT DATA MODELS
+interface Track {
+ id: string;
+ title: string;
+ author: string;
+ duration: number; // milliseconds
+ durationFormatted: string; // "3:45"
+ uri: string;
+ artwork: string;
+ artworkHigh?: string;
+ isStream: boolean;
+}
+interface Playlist {
+ id: string;
+ name: string;
+ tracks: Track[];
+ createdAt: number;
+}
+interface SyncedLyricLine {
+ time: number; // seconds
+ text: string;
+}
+interface LavalinkNodeStatus {
+ id: string;
+ name: string;
+ status: 'online' | 'degraded' | 'offline';
+ ping: number;
+}
+4. DESKTOP APPLICATION LAYOUT (>768px)
+1. Sticky Header:
+ - Brand Logo: YouTube Music icon with "Music Pro" badge.
+ - Search Container: Input bar with magnifying glass icon, instant debounced (200ms) autocomplete dropdown menu, and clear 'X' button.
+ - Lavalink Node Status Pill: Shows active node name, live ping in ms, and a pulsing green health dot. Clicking opens the Cluster Health Modal.
+ - Continuous Radio Toggle button (Autoplay: ON/OFF).
+ - User profile avatar.
+2. Collapsible Left Sidebar:
+ - Menu Navigation:
+ * Home (/) - Featured hero banner, Quick picks, Trending charts, Recommended mixes.
+ * Explore (/explore) - Top Global 50, New Releases, Genres & Moods.
+ * Library (/library) - Tabbed view for Liked Songs, Listening History, and Playlists.
+ * Studio Stats (/studio) - Listening analytics, total play count, and live Lavalink telemetry.
+ - Divider line with a prominent + New Playlist button.
+ - List of user-created playlists with track counts.
+3. Main Content Feed:
+ - Horizontal Category Pills: 🔥 Trending, 🏆 Global Top 50, ✨ Pop Hits, 🎤 Hip Hop & Rap, ☕ Lo-Fi Beats, 🎮 Gaming Synth, 🎸 Rock & Metal, ⚡ High Energy Workout.
+ - Hero Banner: Gradient background highlighting the #1 trending track with a large "Play Now" button and high-res cover art.
+ - "Quick Picks" Section: 4-column x 4-row interactive song grid with hover play overlay and 3-dot action menu.
+ - "Trending Tracks" Section: Numbered 1-20 track list with thumbnail, title, artist, duration, Play Next, Add to Queue, and Like buttons.
+4. Persistent Bottom Player Bar:
+ - Left: 56x56px album thumbnail, auto-scrolling title marquee, artist name, and Like (Thumbs Up) button.
+ - Center: Shuffle button, Previous track, Large Play/Pause circle button, Next track, Repeat button (Cycles: Off -> Repeat All -> Repeat One), and interactive timeline scrubber with current and total timestamps.
+ - Right: Live Web Audio animated visualizer bars, Synced Lyrics toggle button, Queue Drawer toggle button, 5-Band Equalizer modal button, Sleep Timer modal button, and volume slider with mute toggle.
+5. MOBILE & TOUCH LAYOUT (<768px)
+1. Mobile Header: Compact header with logo, search icon button, and cluster status indicator.
+2. Touch-Optimized Content Feed:
+ - Quick Picks Carousel: Horizontal touch-swipeable card carousel with scroll-snap-type: x mandatory and smooth momentum scrolling.
+ - Category chips with horizontal overflow touch scroll.
+3. Floating Mobile Mini-Player:
+ - Glassmorphic card floating at bottom: 68px (directly above the mobile navigation bar).
+ - Shows album art, scrolling song title, artist, Play/Pause button, Next button, and a thin top progress indicator line.
+ - Tapping anywhere on the mini-player smoothly slides up the Fullscreen Now Playing Sheet.
+4. Native Fullscreen Now Playing Sheet:
+ - Ambient blurred backdrop glow reflecting the colors of the current song's album art.
+ - Top dismiss arrow (chevron-down), track title, and equalizer trigger.
+ - Large square album art with rounded corners and drop shadow.
+ - Large touch progress bar with drag-to-seek and timestamp counters.
+ - Large touch controls: Shuffle, Previous, Big Play/Pause button, Next, Repeat.
+ - Bottom Sliding Action Pills:
+ * [UP NEXT]: Queue manager showing Now Playing with animated wave bars, upcoming tracks with reorder arrows (Move Up / Down), swipe-to-delete, "Shuffle Upcoming", and "Clear Queue".
+ * [LYRICS]: Real-time synchronized lyrics scrolling in sync with playback timestamps, with tap-to-seek line support.
+ * [RELATED]: Smart Endless Radio recommendations.
+ * [TIMER]: Sleep timer (15m, 30m, 45m, 1h, End of Track).
+ * [SPEED]: Playback speed cycling (0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 2.0x).
+5. Fixed Mobile Bottom Navigation Bar:
+ - Tabs: Home, Explore, Library, Studio.
+ - Supports iOS/Android safe area bottom insets (padding-bottom: env(safe-area-inset-bottom)).
+6. SMART ZERO-DUPLICATE QUEUE & PLAYBACK LOGIC
+1. Single-Song Search Playback:
+ - Tapping a song from search results plays ONLY that track immediately and initiates smart related radio recommendations, without polluting the queue with 20 mismatched search items.
+ - An explicit "Play All Search Results" button is provided for playing the full search list.
+2. Track Action Menu on Every Row:
+ - "Play Now": Starts track immediately.
+ - "Play Next": Inserts track at index queueIndex + 1 directly after current song.
+ - "Add to End of Queue": Appends track to the end of the queue.
+ - "Like / Save": Toggles saved state in localStorage.
+3. Smart Deduplication Engine:
+ - When adding songs or loading recommendations, checks both track.id and normalized title (removing tags like [Official Video], (Lyrics), [HD]) so the same song or duplicate live version is never played twice.
+4. Continuous Autoplay Radio:
+ - When the queue has 2 or fewer songs remaining and Autoplay is enabled, queries Lavalink for related mixes based on the current track and adds 8 unique, unplayed tracks to the upcoming queue.
+5. Queue Drawer Actions:
+ - "Shuffle Upcoming": Shuffles future songs without interrupting the currently playing song.
+ - "Clear Upcoming": Removes future songs while keeping the active song playing.
+ - Move Up / Move Down buttons for manually ordering upcoming tracks.
+7. WEB AUDIO API EQUALIZER & VISUALIZER
+1. 5-Band Equalizer:
+ - Creates an AudioContext with 5 BiquadFilterNode instances:
+ * 60Hz (lowshelf, min: -12dB, max: +12dB)
+ * 250Hz (peaking, min: -12dB, max: +12dB)
+ * 1000Hz (peaking, min: -12dB, max: +12dB)
+ * 4000Hz (peaking, min: -12dB, max: +12dB)
+ * 16000Hz (highshelf, min: -12dB, max: +12dB)
+ - Presets:
+ * Flat: [0, 0, 0, 0, 0]
+ * Bass Boost: [+6, +4, +1, -1, -2]
+ * Vocal Clarity: [-2, +1, +4, +3, +1]
+ * Electronic: [+5, +3, -1, +2, +4]
+ * Rock: [+4, +2, -1, +3, +5]
+2. Live Visualizer:
+ - AnalyserNode connected to an HTML5 canvas rendering 8 dynamic jumping visualizer frequency bars.
+8. BACKGROUND AUDIO & MEDIASESSION INTEGRATION
+- Configure navigator.mediaSession with full metadata (title, artist, album: "YouTube Music Pro", and 512x512 album artwork).
+- Action handlers for play, pause, previoustrack, nexttrack, and seekto.
+- AudioContext unlock on initial touch/click to ensure background playback continues when the phone screen is locked or switching tabs.
+- Sleep Timer timeout logic to gracefully pause playback when timer expires.
