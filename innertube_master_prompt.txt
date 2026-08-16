@@ -1,0 +1,33 @@
+Build a complete, state-of-the-art YouTube Music web application powered purely by YouTube's native InnerTube API with zero Lavalink dependencies, zero playback errors, and instant 320kbps audio streaming with direct MP3 downloading.
+
+### 1. InnerTube API Architecture & Bot-Gate Bypass (Zero Errors)
+Implement a robust multi-client InnerTube engine that completely avoids "LOGIN_REQUIRED" (Sign in to confirm you're not a bot):
+- **Search & Discovery**: Call `https://www.youtube.com/youtubei/v1/search` using the `WEB` client context (`clientName: 'WEB'`, `clientVersion: '2.20240101.00.00'`) for sub-300ms metadata retrieval.
+- **Audio Stream Resolving**: Call `https://www.youtube.com/youtubei/v1/player` using the `ANDROID_MUSIC` client (`clientName: 'ANDROID_MUSIC'`, `clientVersion: '6.42.52'`, `X-YouTube-Client-Name: '21'`). This client receives direct un-ciphered `.googlevideo.com` audio stream URLs that play natively in HTML5 `<audio>` without signature descrambling.
+- **Multi-Tier Fallback Cascade**: If a video is region-restricted or age-gated, automatically fall back to:
+  1. InnerTube `ANDROID_MUSIC` client
+  2. InnerTube `IOS` client (`clientName: 'IOS'`, `clientVersion: '19.09.4'`)
+  3. Audius Open API (`https://api.audius.co`) for guaranteed instant fallback playback
+- **Auto-Radio & Recommendations**: Use `https://www.youtube.com/youtubei/v1/next` to parse related tracks and compact video renderers for endless continuous music.
+
+### 2. Audio Engine & Direct MP3 Downloads
+- **Pure Audio Playback**: Stream pure audio with native HTML5 `<audio>` controls and `MediaSession` integration (Lock screen media controls, background playback, high-res album artwork, track title, artist, and scrubbing).
+- **Instant Seek & Range Support**: Support HTTP 206 Partial Content headers (`Accept-Ranges: bytes`) for 0ms latency when seeking anywhere in the track.
+- **Direct 320kbps MP3 Download**: Provide a dedicated "Download MP3" button on every song row and in the Now Playing sheet with `Content-Disposition: attachment; filename="{TrackTitle}.mp3"`.
+
+### 3. Synchronized Real-Time Lyrics
+- Connect to LRCLIB API (`https://lrclib.net/api/get` and `/api/search`).
+- Parse synchronized timestamped LRC strings (`[mm:ss.xx]`).
+- Auto-scroll lyrics smoothly to the active line every 250ms based on audio `currentTime`.
+- Allow clicking any lyric line to jump the audio timeline directly to that exact timestamp.
+
+### 4. Smart Zero-Duplicate Queue System
+- **Single-Song Direct Play**: Clicking a song plays only that track without dumping entire search lists into the queue.
+- **Deduplication Engine**: Clean titles by removing tags like `[Official Music Video]`, `(Audio)`, `[HD]`, `[4K]` and prevent identical tracks from entering the queue.
+- **Queue Controls**: Slide-over queue drawer featuring Up/Down track reordering, single-item removal (X), "Shuffle Upcoming", "Clear Queue", and active song audio-wave equalizer visualizer.
+- **Continuous Radio Autoplay**: Automatically fetch and append matching recommended tracks when the queue has fewer than 2 songs remaining.
+
+### 5. UI/UX Design & Mobile Touch Optimization
+- **Theme**: Ultra-clean YouTube Music OLED dark theme (`#030303` background, `#0f0f14` surface cards, `#ff0033` accent red, `#ffffff` typography with Google Font 'Plus Jakarta Sans').
+- **Mobile Touch Carousel**: Horizontal touch carousel with `scroll-snap-type: x mandatory` for Quick Picks on mobile screens.
+- **Mini-Player & Fullscreen Sheet**: Floating bottom mini-player on mobile that smoothly expands into a fullscreen now-playing glassmorphic modal with large album art, playback speed toggle (0.5x to 2.0x), and sleep timer (15m, 30m, 45m, 1h, End of Track).
