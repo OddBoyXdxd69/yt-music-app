@@ -1,6 +1,6 @@
 /**
- * YouTube Music Pro - 320kbps Pure Studio Audio Player
- * Zero Video Restrictions + 0ms Pre-buffering + MP3 Download + MediaSession Engine + LRCLIB Lyrics
+ * YouTube Music Pro - Direct On-Demand 320kbps Pure Studio Audio Player
+ * On-Demand Streaming Only (No Pre-downloading) + MP3 Download + MediaSession Engine + LRCLIB Lyrics
  */
 
 (function () {
@@ -37,23 +37,11 @@
   audioElement.preload = 'auto';
   audioElement.crossOrigin = 'anonymous';
 
-  // --- PRE-BUFFERING ENGINE (0ms Delay) ---
-  function prebufferNextTrack() {
-    if (state.queue.length > state.queueIndex + 1) {
-      const nextTrack = state.queue[state.queueIndex + 1];
-      if (nextTrack && nextTrack.id) {
-        // Silently request stream to warm the server disk cache ahead of time
-        fetch(`/api/stream?id=${nextTrack.id}`, { headers: { Range: 'bytes=0-1024' } }).catch(() => {});
-      }
-    }
-  }
-
   // --- AUDIO LISTENERS ---
   audioElement.addEventListener('play', () => {
     state.isPlaying = true;
     updatePlayBtnUI();
     updateMediaSession();
-    prebufferNextTrack();
   });
 
   audioElement.addEventListener('pause', () => {
@@ -122,7 +110,6 @@
         if (uniqueTracks.length > 0) {
           state.queue.push(...uniqueTracks.slice(0, 8));
           renderQueue();
-          prebufferNextTrack();
         }
       }
     } catch (e) {}
@@ -160,7 +147,6 @@
     const insertIdx = state.queueIndex + 1;
     state.queue.splice(insertIdx, 0, track);
     renderQueue();
-    prebufferNextTrack();
     showNotification(`Will play next: "${track.title}" ⏭️`);
   }
 
@@ -187,7 +173,6 @@
 
     state.queue = [...played, ...upcoming];
     renderQueue();
-    prebufferNextTrack();
     showNotification('Shuffled upcoming songs 🔀');
   }
 
@@ -251,7 +236,7 @@
     renderQueue();
     fetchLyrics(track.title, track.author);
 
-    // Play 320kbps Pure Studio Audio Stream
+    // Play on-demand pure audio stream
     audioElement.src = `/api/stream?id=${track.id}`;
     audioElement.playbackRate = state.playbackSpeed;
     audioElement.volume = state.volume / 100;
@@ -965,7 +950,6 @@
           state.queue[realIdx] = state.queue[realIdx - 1];
           state.queue[realIdx - 1] = temp;
           renderQueue();
-          prebufferNextTrack();
         }
       });
 
@@ -977,7 +961,6 @@
           state.queue[realIdx] = state.queue[realIdx + 1];
           state.queue[realIdx + 1] = temp;
           renderQueue();
-          prebufferNextTrack();
         }
       });
 
@@ -986,7 +969,6 @@
         const realIdx = parseInt(row.getAttribute('data-real-idx'), 10);
         state.queue.splice(realIdx, 1);
         renderQueue();
-        prebufferNextTrack();
       });
     });
   }
@@ -1261,7 +1243,7 @@
       autoSidebarCheckbox.addEventListener('change', (e) => setAutoplay(e.target.checked));
     }
 
-    // Download handlers in Player Bar & Now Playing sheet
+    // Download handlers
     document.getElementById('player-download-btn')?.addEventListener('click', () => {
       if (state.currentTrack) downloadTrack(state.currentTrack);
     });
@@ -1367,6 +1349,9 @@
     // Speed & Timer toggles in Fullscreen modal
     document.getElementById('np-speed-btn').addEventListener('click', cyclePlaybackSpeed);
     document.getElementById('np-timer-btn').addEventListener('click', () => {
+      document.getElementById('timer-modal').classList.add('open');
+    });
+    document.getElementById('np-timer-btn-top')?.addEventListener('click', () => {
       document.getElementById('timer-modal').classList.add('open');
     });
     document.getElementById('timer-toggle-btn')?.addEventListener('click', () => {
