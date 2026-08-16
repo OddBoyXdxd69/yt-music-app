@@ -153,7 +153,7 @@ app.get('/api/stream', (req, res) => {
 
   const cachedFile = path.join(CACHE_DIR, `${id}.mp3`);
 
-  // If cached file exists, stream with HTTP Range support (Instant seek!)
+  // If cached file exists, stream with HTTP Range support (Instant 0ms seek!)
   if (fs.existsSync(cachedFile)) {
     const stat = fs.statSync(cachedFile);
     const fileSize = stat.size;
@@ -186,8 +186,6 @@ app.get('/api/stream', (req, res) => {
   }
 
   // Stream live and cache concurrently
-  console.log(`🎵 Extracting highest quality 320kbps audio for: ${id}`);
-
   res.header('Content-Type', 'audio/mpeg');
   res.header('Accept-Ranges', 'bytes');
   res.header('Cache-Control', 'no-cache');
@@ -204,9 +202,9 @@ app.get('/api/stream', (req, res) => {
 
   const ffmpeg = spawn('ffmpeg', [
     '-i', 'pipe:0',
-    '-vn',                     // Zero video (Pure Audio Only)
+    '-vn',                     // Pure Audio Only
     '-c:a', 'libmp3lame',
-    '-b:a', '320k',            // Studio 320kbps Highest Quality MP3
+    '-b:a', '320k',            // 320kbps Studio MP3 Quality
     '-f', 'mp3',
     'pipe:1'
   ]);
@@ -223,7 +221,6 @@ app.get('/api/stream', (req, res) => {
   ffmpeg.stdout.on('end', () => {
     res.end();
     fileStream.end();
-    console.log(`✅ Cached 320kbps studio audio for track: ${id}`);
   });
 
   req.on('close', () => {
@@ -242,7 +239,48 @@ app.get('/api/stream', (req, res) => {
   });
 });
 
-// 3. Related tracks / Infinite Auto-Queue
+// 3. Direct 320kbps MP3 File Download Endpoint
+app.get('/api/download', (req, res) => {
+  const { id, title } = req.query;
+  if (!id) return res.status(400).send('ID required');
+
+  const safeFilename = (title || 'track').replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'audio';
+  const cachedFile = path.join(CACHE_DIR, `${id}.mp3`);
+
+  res.header('Content-Type', 'audio/mpeg');
+  res.header('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}.mp3"`);
+
+  if (fs.existsSync(cachedFile)) {
+    return fs.createReadStream(cachedFile).pipe(res);
+  }
+
+  const ytdl = spawn('/home/ubuntu/yt-music-app/bin/yt-dlp', [
+    '--cookies', '/home/ubuntu/cookies.txt',
+    '-f', 'ba/b/best',
+    '-o', '-',
+    '--no-playlist',
+    `https://www.youtube.com/watch?v=${id}`
+  ]);
+
+  const ffmpeg = spawn('ffmpeg', [
+    '-i', 'pipe:0',
+    '-vn',
+    '-c:a', 'libmp3lame',
+    '-b:a', '320k',
+    '-f', 'mp3',
+    'pipe:1'
+  ]);
+
+  ytdl.stdout.pipe(ffmpeg.stdin);
+  ffmpeg.stdout.pipe(res);
+
+  req.on('close', () => {
+    try { ytdl.kill(); } catch (e) {}
+    try { ffmpeg.kill(); } catch (e) {}
+  });
+});
+
+// 4. Related tracks / Infinite Auto-Queue
 app.get('/api/related', async (req, res) => {
   const { id, title, author } = req.query;
   if (!title && !author) return res.status(400).json({ error: 'Title or author required' });
@@ -264,7 +302,7 @@ app.get('/api/related', async (req, res) => {
   }
 });
 
-// 4. Autocomplete suggestions
+// 5. Autocomplete suggestions
 app.get('/api/suggestions', async (req, res) => {
   const query = req.query.q || '';
   if (!query) return res.json([]);
@@ -279,7 +317,7 @@ app.get('/api/suggestions', async (req, res) => {
   }
 });
 
-// 5. Curated Categories
+// 6. Curated Categories
 const CURATED_CATEGORIES = {
   trending: 'Top Trending Hits 2026',
   charts: 'Global Top 50 Songs',
@@ -313,7 +351,7 @@ app.get('/api/category/:cat', async (req, res) => {
   }
 });
 
-// 6. Synced Lyrics API
+// 7. Synced Lyrics API
 app.get('/api/lyrics', async (req, res) => {
   const { title, artist } = req.query;
   if (!title) return res.status(400).json({ error: 'Title required' });
@@ -352,7 +390,7 @@ app.get('/api/lyrics', async (req, res) => {
   }
 });
 
-// 7. Node Status
+// 8. Node Status
 app.get('/api/nodes/status', (req, res) => {
   res.json({
     updatedAt: new Date().toISOString(),

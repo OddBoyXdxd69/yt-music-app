@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>YouTube Music Pro - Ad-Free Unlimited Audio & Background Play</title>
-  <meta name="description" content="Unlimited ad-free background music streaming with smart queue, live lyrics, equalizer, and Lavalink cluster.">
+  <title>YouTube Music Pro - 320kbps Audio & Free MP3 Download</title>
+  <meta name="description" content="Unlimited ad-free background music streaming with 320kbps MP3 download, smart queue, synced lyrics, and Lavalink cluster.">
   <meta name="theme-color" content="#030303">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,23 +15,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="/style.css">
-  <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
 
 <div id="app">
-  <!-- Embedded YouTube Audio Engine Container (Hidden from view but active) -->
-  <div id="yt-player-wrapper" style="position: fixed; width: 1px; height: 1px; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;">
-    <div id="yt-player"></div>
-  </div>
-
   <!-- Top App Header -->
   <header class="app-header">
     <div class="brand-section" id="nav-brand-home">
       <div class="brand-logo">
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
       </div>
-      <span class="brand-text">YouTube Music <span class="brand-badge">PRO</span></span>
+      <span class="brand-text">YouTube Music <span class="brand-badge">320kbps</span></span>
     </div>
 
     <!-- Search Input & Autocomplete Suggestions -->
@@ -48,7 +42,7 @@
 
     <!-- Right Header Actions -->
     <div class="header-actions">
-      <button id="autoplay-toggle-header" class="header-btn active" title="Autoplay / Smart Endless Radio">
+      <button id="autoplay-toggle-header" class="header-btn active" title="Continuous Radio">
         <span class="autoplay-dot"></span>
         <span class="btn-text">Autoplay: ON</span>
       </button>
@@ -83,10 +77,10 @@
         </div>
       </div>
 
-      <div class="sidebar-section-title" style="margin-top: 14px;">Continuous Radio</div>
+      <div class="sidebar-section-title" style="margin-top: 14px;">Endless Radio</div>
       <div style="padding: 0 10px; display: flex; flex-direction: column; gap: 8px;">
         <label class="toggle-switch-label">
-          <span>Endless Mix</span>
+          <span>Continuous Mix</span>
           <input type="checkbox" id="sidebar-autoplay-checkbox" checked>
           <span class="toggle-slider"></span>
         </label>
@@ -154,7 +148,7 @@
     <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
       <div class="queue-section-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span>UP NEXT (<span id="q-upcoming-count">0</span>)</span>
-        <span style="font-size: 0.68rem; color: var(--accent-green);">⚡ NO DUPLICATES</span>
+        <span style="font-size: 0.68rem; color: var(--accent-green);">⚡ PRE-BUFFERED 0ms DELAY</span>
       </div>
       <div id="queue-list" class="queue-items-container"></div>
     </div>
@@ -170,10 +164,13 @@
       <img id="player-cover-img" class="player-cover" src="https://i.ytimg.com/vi/60ItHLz5WEA/hqdefault.jpg" alt="Track Cover">
       <div class="player-meta">
         <div id="player-title" class="player-title">Welcome to YouTube Music</div>
-        <div id="player-artist" class="player-artist">Tap any song to play instantly</div>
+        <div id="player-artist" class="player-artist">320kbps Pure Studio Audio</div>
       </div>
       <button id="player-like-btn" class="track-action-btn desktop-only" title="Like Song">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+      </button>
+      <button id="player-download-btn" class="track-action-btn desktop-only" title="Download 320kbps MP3">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       </button>
     </div>
 
@@ -241,9 +238,9 @@
       <button id="now-playing-close-btn" class="modal-close-btn" style="padding: 8px;">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
       </button>
-      <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Now Playing</div>
-      <button id="np-timer-btn-top" class="modal-close-btn" style="padding: 8px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Now Playing (320kbps)</div>
+      <button id="np-download-btn-top" class="modal-close-btn" style="padding: 8px;" title="Download MP3">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       </button>
     </div>
 
@@ -257,7 +254,7 @@
       <div class="np-track-details">
         <div style="flex: 1; min-width: 0;">
           <h2 id="np-title" class="np-title">Welcome to YouTube Music</h2>
-          <p id="np-artist" class="np-artist">Ad-Free Background Stream</p>
+          <p id="np-artist" class="np-artist">320kbps Pure Studio Audio</p>
         </div>
         <button id="np-like-btn" class="track-action-btn" style="padding: 10px;">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
@@ -298,6 +295,10 @@
         <button id="np-queue-btn" class="np-action-pill">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><circle cx="4" cy="6" r="1.5"></circle><circle cx="4" cy="12" r="1.5"></circle><circle cx="4" cy="18" r="1.5"></circle></svg>
           Queue
+        </button>
+        <button id="np-download-action-btn" class="np-action-pill">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          MP3
         </button>
         <button id="np-timer-btn" class="np-action-pill">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>

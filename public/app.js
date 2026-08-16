@@ -1,6 +1,6 @@
 /**
  * YouTube Music Pro - 320kbps Pure Studio Audio Player
- * Zero Video Restrictions + Background MediaSession Engine + Live Synced Lyrics + Zero Duplicate Queue
+ * Zero Video Restrictions + 0ms Pre-buffering + MP3 Download + MediaSession Engine + LRCLIB Lyrics
  */
 
 (function () {
@@ -37,11 +37,23 @@
   audioElement.preload = 'auto';
   audioElement.crossOrigin = 'anonymous';
 
+  // --- PRE-BUFFERING ENGINE (0ms Delay) ---
+  function prebufferNextTrack() {
+    if (state.queue.length > state.queueIndex + 1) {
+      const nextTrack = state.queue[state.queueIndex + 1];
+      if (nextTrack && nextTrack.id) {
+        // Silently request stream to warm the server disk cache ahead of time
+        fetch(`/api/stream?id=${nextTrack.id}`, { headers: { Range: 'bytes=0-1024' } }).catch(() => {});
+      }
+    }
+  }
+
   // --- AUDIO LISTENERS ---
   audioElement.addEventListener('play', () => {
     state.isPlaying = true;
     updatePlayBtnUI();
     updateMediaSession();
+    prebufferNextTrack();
   });
 
   audioElement.addEventListener('pause', () => {
@@ -77,8 +89,8 @@
   audioElement.addEventListener('ended', handleTrackEnd);
 
   audioElement.addEventListener('error', (e) => {
-    console.warn('Audio stream error, skipping to next track:', e);
-    showNotification('Stream error, loading next track...');
+    console.warn('Audio stream error, advancing track:', e);
+    showNotification('Advancing to next track...');
     setTimeout(playNextTrack, 1200);
   });
 
@@ -110,10 +122,22 @@
         if (uniqueTracks.length > 0) {
           state.queue.push(...uniqueTracks.slice(0, 8));
           renderQueue();
-          console.log(`⚡ Added ${uniqueTracks.length} unique tracks to queue`);
+          prebufferNextTrack();
         }
       }
     } catch (e) {}
+  }
+
+  // --- MP3 DOWNLOAD FUNCTION ---
+  function downloadTrack(track) {
+    if (!track || !track.id) return;
+    showNotification(`⬇️ Downloading "${track.title}" in 320kbps MP3...`);
+    const link = document.createElement('a');
+    link.href = `/api/download?id=${track.id}&title=${encodeURIComponent(track.title)}`;
+    link.download = `${track.title}.mp3`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
 
   // --- QUEUE ACTIONS ---
@@ -136,6 +160,7 @@
     const insertIdx = state.queueIndex + 1;
     state.queue.splice(insertIdx, 0, track);
     renderQueue();
+    prebufferNextTrack();
     showNotification(`Will play next: "${track.title}" ⏭️`);
   }
 
@@ -162,6 +187,7 @@
 
     state.queue = [...played, ...upcoming];
     renderQueue();
+    prebufferNextTrack();
     showNotification('Shuffled upcoming songs 🔀');
   }
 
@@ -441,7 +467,7 @@
     viewContainer.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; gap: 16px;">
         <div style="width: 36px; height: 36px; border: 3px solid rgba(255,0,51,0.2); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-        <p style="color: var(--text-secondary);">Querying Lavalink cluster for "${escapeHtml(query)}"...</p>
+        <p style="color: var(--text-secondary);">Searching across Lavalink cluster for "${escapeHtml(query)}"...</p>
       </div>
       <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
     `;
@@ -491,10 +517,16 @@
           <div class="hero-tag">🌟 Featured Hit</div>
           <h1 class="hero-title">${escapeHtml(featured.title || 'Trending Song')}</h1>
           <p class="hero-subtitle">${escapeHtml(featured.author || 'Artist')} • 320kbps Pure Studio Audio</p>
-          <button id="hero-play-btn" class="hero-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            Play Now
-          </button>
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button id="hero-play-btn" class="hero-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              Play Now
+            </button>
+            <button id="hero-download-btn" class="header-btn" style="padding: 8px 14px; display: flex; align-items: center; gap: 6px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download MP3
+            </button>
+          </div>
         </div>
         <img src="${featured.artworkHigh || featured.artwork}" style="width: 130px; height: 130px; border-radius: var(--radius-md); object-fit: cover; box-shadow: 0 10px 30px rgba(0,0,0,0.6);" alt="Cover">
       </div>
@@ -535,6 +567,9 @@
               </div>
               <span class="track-duration">${t.durationFormatted}</span>
               <div class="track-actions">
+                <button class="track-action-btn track-download-btn" title="Download 320kbps MP3">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
                 <button class="track-action-btn play-next-btn" title="Play Next">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
                 </button>
@@ -555,6 +590,10 @@
 
     document.getElementById('hero-play-btn')?.addEventListener('click', () => {
       playSongDirect(featured);
+    });
+
+    document.getElementById('hero-download-btn')?.addEventListener('click', () => {
+      downloadTrack(featured);
     });
 
     document.getElementById('play-all-quick')?.addEventListener('click', () => {
@@ -591,7 +630,7 @@
             <p style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(topResult.author)} • ${topResult.durationFormatted}</p>
             <div style="display: flex; gap: 8px; margin-top: 8px;">
               <button id="top-result-play" class="hero-btn" style="padding: 5px 14px; font-size: 0.8rem;">Play Now</button>
-              <button id="top-result-next" class="header-btn" style="padding: 5px 10px; font-size: 0.8rem;">Play Next</button>
+              <button id="top-result-download" class="header-btn" style="padding: 5px 10px; font-size: 0.8rem;">Download MP3</button>
             </div>
           </div>
         </div>
@@ -608,6 +647,9 @@
             </div>
             <span class="track-duration">${t.durationFormatted}</span>
             <div class="track-actions">
+              <button class="track-action-btn track-download-btn" title="Download 320kbps MP3">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              </button>
               <button class="track-action-btn play-next-btn" title="Play Next">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
               </button>
@@ -629,8 +671,8 @@
       playSongDirect(topResult);
     });
 
-    document.getElementById('top-result-next')?.addEventListener('click', () => {
-      addToQueueNext(topResult);
+    document.getElementById('top-result-download')?.addEventListener('click', () => {
+      downloadTrack(topResult);
     });
 
     document.getElementById('search-play-all-btn')?.addEventListener('click', () => {
@@ -674,6 +716,13 @@
         }
       });
 
+      row.querySelector('.track-download-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = row.getAttribute('data-track-id');
+        const track = tracks.find(t => t.id === id);
+        if (track) downloadTrack(track);
+      });
+
       row.querySelector('.play-next-btn')?.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = row.getAttribute('data-track-id');
@@ -704,7 +753,7 @@
     const html = `
       <div style="margin-bottom: 18px;">
         <h2 style="font-size: 1.45rem; font-weight: 800;">Your Library</h2>
-        <p style="color: var(--text-secondary); font-size: 0.85rem;">Liked songs and listening history.</p>
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">Liked songs, listening history, and offline downloads.</p>
       </div>
 
       <div style="display: flex; gap: 10px; margin-bottom: 16px;">
@@ -748,6 +797,9 @@
         </div>
         <span class="track-duration">${t.durationFormatted || '0:00'}</span>
         <div class="track-actions">
+          <button class="track-action-btn track-download-btn" title="Download MP3">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          </button>
           <button class="track-action-btn like-toggle-btn liked" title="Remove">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
           </button>
@@ -792,6 +844,12 @@
           }
           return;
         }
+        if (e.target.closest('.track-download-btn')) {
+          const id = row.getAttribute('data-track-id');
+          const track = tracks.find(t => t.id === id);
+          if (track) downloadTrack(track);
+          return;
+        }
         const id = row.getAttribute('data-track-id');
         const track = tracks.find(t => t.id === id);
         if (track) {
@@ -808,7 +866,7 @@
     const html = `
       <div style="margin-bottom: 18px;">
         <h2 style="font-size: 1.45rem; font-weight: 800;">Studio Analytics & Cluster Status</h2>
-        <p style="color: var(--text-secondary); font-size: 0.85rem;">Live streaming telemetry & node health.</p>
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">Live streaming telemetry, 320kbps audio engine & node health.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
@@ -821,12 +879,12 @@
           <div style="font-size: 1.6rem; font-weight: 800; color: #00f2fe; margin-top: 4px;">${totalHours} <span style="font-size: 0.9rem; color: var(--text-secondary);">hrs</span></div>
         </div>
         <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px;">
-          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Liked Tracks</span>
-          <div style="font-size: 1.6rem; font-weight: 800; color: #7928ca; margin-top: 4px;">${state.likedTracks.length}</div>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Audio Bitrate</span>
+          <div style="font-size: 1.6rem; font-weight: 800; color: #10b981; margin-top: 4px;">320 kbps</div>
         </div>
         <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px;">
-          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Lavalink Nodes</span>
-          <div style="font-size: 1.6rem; font-weight: 800; color: #10b981; margin-top: 4px;">4 Active</div>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Lavalink Cluster</span>
+          <div style="font-size: 1.6rem; font-weight: 800; color: #7928ca; margin-top: 4px;">4 Active</div>
         </div>
       </div>
 
@@ -907,6 +965,7 @@
           state.queue[realIdx] = state.queue[realIdx - 1];
           state.queue[realIdx - 1] = temp;
           renderQueue();
+          prebufferNextTrack();
         }
       });
 
@@ -918,6 +977,7 @@
           state.queue[realIdx] = state.queue[realIdx + 1];
           state.queue[realIdx + 1] = temp;
           renderQueue();
+          prebufferNextTrack();
         }
       });
 
@@ -926,6 +986,7 @@
         const realIdx = parseInt(row.getAttribute('data-real-idx'), 10);
         state.queue.splice(realIdx, 1);
         renderQueue();
+        prebufferNextTrack();
       });
     });
   }
@@ -1200,6 +1261,17 @@
       autoSidebarCheckbox.addEventListener('change', (e) => setAutoplay(e.target.checked));
     }
 
+    // Download handlers in Player Bar & Now Playing sheet
+    document.getElementById('player-download-btn')?.addEventListener('click', () => {
+      if (state.currentTrack) downloadTrack(state.currentTrack);
+    });
+    document.getElementById('np-download-btn-top')?.addEventListener('click', () => {
+      if (state.currentTrack) downloadTrack(state.currentTrack);
+    });
+    document.getElementById('np-download-action-btn')?.addEventListener('click', () => {
+      if (state.currentTrack) downloadTrack(state.currentTrack);
+    });
+
     // Playback Controls
     document.getElementById('player-play-btn').addEventListener('click', togglePlay);
     document.getElementById('mobile-mini-play-btn').addEventListener('click', (e) => {
@@ -1295,9 +1367,6 @@
     // Speed & Timer toggles in Fullscreen modal
     document.getElementById('np-speed-btn').addEventListener('click', cyclePlaybackSpeed);
     document.getElementById('np-timer-btn').addEventListener('click', () => {
-      document.getElementById('timer-modal').classList.add('open');
-    });
-    document.getElementById('np-timer-btn-top')?.addEventListener('click', () => {
       document.getElementById('timer-modal').classList.add('open');
     });
     document.getElementById('timer-toggle-btn')?.addEventListener('click', () => {
